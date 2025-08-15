@@ -6,17 +6,18 @@ require __DIR__ . '/vendor/autoload.php';
 
 header("Content-Type: application/json");
 
-// Permitir apenas POST
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Método não permitido.']);
+    echo json_encode(['error' => 'Método não permitido']);
     exit;
 }
 
-// Recebe dados do POST
-$data = json_decode(file_get_contents('php://input'), true);
+$body = json_decode(file_get_contents('php://input'), true);
+$to = $body['to'] ?? null;
+$subject = $body['subject'] ?? null;
+$message = $body['message'] ?? null;
 
-if (!isset($data['to']) || !isset($data['subject']) || !isset($data['message'])) {
+if (!$to || !$subject || !$message) {
     http_response_code(400);
     echo json_encode(['error' => 'Campos obrigatórios: to, subject, message']);
     exit;
@@ -25,27 +26,32 @@ if (!isset($data['to']) || !isset($data['subject']) || !isset($data['message']))
 $mail = new PHPMailer(true);
 
 try {
+    // SMTP Microsoft 365
     $mail->isSMTP();
-    $mail->Host = 'smtp.seudominio.com';
+    $mail->Host = 'smtp.office365.com';    // Microsoft 365
     $mail->SMTPAuth = true;
-    $mail->Username = 'usuario@seudominio.com';
-    $mail->Password = 'sua_senha';
-    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-    $mail->Port = 587; // ou 465 para SMTPS
+    $mail->Username = 'contato@seudominio.com'; // sua caixa do M365
+    $mail->Password = 'SUA_SENHA_OU_APP_PASSWORD';
+    $mail->Port = 587;                      // Submission
+    $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS; // STARTTLS obrigatório
 
-    // Remetente e destinatário
-    $mail->setFrom('usuario@seudominio.com', 'Seu Nome');
-    $mail->addAddress($data['to']);
+    // Remetente precisa ser a mesma caixa (ou alguém com Send As/Send on behalf)
+    $mail->setFrom('contato@seudominio.com', 'Seu Nome/Empresa');
+    $mail->addAddress($to);
 
-    // Conteúdo do e-mail
+    // Conteúdo
+    $mail->CharSet = 'UTF-8';
     $mail->isHTML(true);
-    $mail->Subject = $data['subject'];
-    $mail->Body = $data['message'];
+    $mail->Subject = $subject;
+    $mail->Body = $message;
+    $mail->AltBody = strip_tags($message);
+
+    // (Opcional) Reply-To diferente
+    // $mail->addReplyTo('suporte@seudominio.com', 'Suporte');
 
     $mail->send();
-
-    echo json_encode(['success' => true, 'message' => 'E-mail enviado com sucesso.']);
+    echo json_encode(['success' => true, 'message' => 'E-mail enviado']);
 } catch (Exception $e) {
     http_response_code(500);
-    echo json_encode(['error' => "Erro ao enviar e-mail: {$mail->ErrorInfo}"]);
+    echo json_encode(['error' => $mail->ErrorInfo]);
 }
